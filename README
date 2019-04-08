@@ -3,6 +3,6 @@
 Usage: see code
 
 /java/ByteArray.java      rev 181219
-/java/UdpReceiver.java    rev 190404
+/java/UdpReceiver.java    rev 190404  Pack/unpack data (byte, byte[], short, int, long, float, double) into byte[]
 
 /android/Notifier.java    rev 190402
