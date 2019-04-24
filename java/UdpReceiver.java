@@ -1,38 +1,38 @@
 //package org.samples.java.udp;
 
 /**
- * UdpReceiver class
+ * UdpReceiver class. Queues up received packets.
  *
  * Usage:
- *  // create UDP receiver listener
- *  UdpReceiver.Listener listener = new UdpReceiver.Listener() {
+ *   // create UDP receiver listener
+ *   UdpReceiver.Listener listener = new UdpReceiver.Listener() {
  *      public void onUdpPacket(DatagramPacket dp) {
- *	    ...do something with packet
- *	}
+ *   		...do something with packet
+ *   	}
  *      public void onUdpError(Exception e) {
- *	    e.printStackTrace();
+ *   		e.printStackTrace();
  *      }
- *  };
- *  // open multicast or datagram socket (depends on address)
- *  UdpReceiver receiver =
- *	new UdpReceiver(10000, InetAddress.getByName("224.0.0.1"), listener);
- *  // bind socket to interface, if needed
- *  receiver.setInterface(InetAddress.getByName("192.168.1.1")); 
- *  // check or set socket properties, if needed
- *  if (receiver.isMulticastSocket()) {
- *  	((MulticastSocket) receiver.getSocket()).get ... ();
- *  }
- *  // increase datagram buffer length (256 bytes default), if needed
- *  receiver.setBufferLength(512);
- *  // start listening
- *  receiver.start();
+ *   };
+ *   // open multicast or datagram socket (depends on address)
+ *   UdpReceiver receiver =
+ *  	new UdpReceiver(10000, InetAddress.getByName("224.0.0.1"), listener);
+ *   // bind socket to interface, if needed
+ *   receiver.setInterface(InetAddress.getByName("192.168.1.1")); 
+ *   // check or set socket properties, if needed
+ *   if (receiver.isMulticastSocket()) {
+ *  	((MulticastSocket) receiver.getSocket()).set...();
+ *   }
+ *   // increase datagram buffer length (256 bytes default), if needed
+ *   receiver.setBufferLength(508); // IPv4 guaranteed receive packet size by any host
+ *   // start listening
+ *   receiver.start();
  *    ....
- *  // stop listening, close socket
- *  receiver.stop();
+ *   // stop listening, close socket. Restart not possible.
+ *   receiver.close();
  *
  * Author:  miktim@mail.ru
  * Created: 2019-03-21
- * Updated: 2019-04-04
+ * Updated: 2019-04-24
  *
  * License: MIT
  */
@@ -53,11 +53,11 @@ public class UdpReceiver {
         public abstract void onUdpPacket(DatagramPacket packet);
         public abstract void onUdpError(Exception e);
     }
-
+    
     private DatagramSocket socket; 
     private InetAddress groupAddress; // multicast group address
     private InetAddress infAddress;   // interface address
-    private int bufferLength = 256;
+    private int bufferLength = 256;   // 508 - IPv4 guaranteed receive packet size by any host
     private Listener listener;
     private Thread receiver = new ReceiverThread();
     
@@ -89,7 +89,7 @@ public class UdpReceiver {
     }
 
     private class PacketDequer extends Thread {
-
+// SO_RCVBUF size = 106496 (Linux x64)
         public void run() {
             while (!socket.isClosed()) {
             	synchronized (packetQueue) {
@@ -120,12 +120,16 @@ public class UdpReceiver {
             ((MulticastSocket)socket).joinGroup(ia);
         } else {
             socket = new DatagramSocket(port, ia);
+            if (ia.isAnyLocalAddress()) socket.setBroadcast(true); // android
         }
         this.listener = udpListener;
     }
 
     public void setInterface(InetAddress infInetAddress) throws IOException {
 	if (receiver.isAlive()) throw new SocketException("Socket in use");
+	if (NetworkInterface.getByInetAddress(infInetAddress) == null) {
+	    throw new SocketException("No such interface");
+	}
 	if (isMulticastSocket()) { 
 	    ((MulticastSocket) socket).setInterface(infInetAddress);
 	} else {
@@ -133,9 +137,11 @@ public class UdpReceiver {
 	    socket.close();
 	    socket = new DatagramSocket(port, infInetAddress);
 	}
-	if (NetworkInterface.getByInetAddress(infInetAddress) != null) {
-	    infAddress = infInetAddress;
-	}
+        infAddress = infInetAddress;
+    }
+    
+    public InetAddress getInfAddress() {
+	return infAddress;
     }
     
     public boolean isMulticastSocket() {
@@ -146,7 +152,8 @@ public class UdpReceiver {
         return socket;
     }
 
-    public void setBufferLength(int length) {
+    public void setBufferLength(int length) throws IllegalArgumentException {
+	if (length <= 0) throw new IllegalArgumentException();
         bufferLength = length;
     }
 
@@ -176,7 +183,7 @@ public class UdpReceiver {
 	}
     }
 
-    public void stop() {
+    public void close() {
         if (!socket.isClosed()) {
     	    try { // ???
         	if (groupAddress != null) 
