@@ -16,7 +16,7 @@
  *   // open multicast or datagram socket (depends on address)
  *   UdpReceiver receiver =
  *  	new UdpReceiver(10000, InetAddress.getByName("224.0.0.1"), listener);
- *   // bind socket to interface, if needed
+ *   // bind socket to interface, if needed (datagram socket will be recreated)
  *   receiver.setInterface(InetAddress.getByName("192.168.1.1")); 
  *   // check or set socket properties, if needed
  *   if (receiver.isMulticastSocket()) {
