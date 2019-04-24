@@ -77,6 +77,8 @@ public class UdpReceiver {
             		packetQueue.addLast(dp);
             		packetQueue.notify();
             	    }
+            	} catch (java.net.SocketTimeoutException e) { 
+// do nothing
             	} catch (Exception e) {
             	    if(socket.isClosed()) break;
 		    e.printStackTrace();
