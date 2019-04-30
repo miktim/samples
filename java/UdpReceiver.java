@@ -16,7 +16,7 @@
  *   // open multicast or datagram socket (depends on address)
  *   UdpReceiver receiver =
  *  	new UdpReceiver(10000, InetAddress.getByName("224.0.0.1"), listener);
- *   // bind socket to interface, if needed (datagram socket will be recreated)
+ *   // define socket interface, if needed
  *   receiver.setInterface(InetAddress.getByName("192.168.1.1")); 
  *   // check or set socket properties, if needed
  *   if (receiver.isMulticastSocket()) {
@@ -24,7 +24,7 @@
  *   }
  *   // increase datagram buffer length (256 bytes default), if needed
  *   receiver.setBufferLength(508); // IPv4 guaranteed receive packet size by any host
- *   // start listening
+ *   // bind (join | connect) socket, start listening
  *   receiver.start();
  *    ....
  *   // stop listening, close socket. Restart not possible.
@@ -54,10 +54,11 @@ public class UdpReceiver {
         public abstract void onUdpError(Exception e);
     }
     
-    private DatagramSocket socket; 
-    private InetAddress groupAddress; // multicast group address
-    private InetAddress infAddress;   // interface address
-    private int bufferLength = 256;   // 508 - IPv4 guaranteed receive packet size by any host
+    private DatagramSocket socket;
+    private int port;
+    private InetAddress rcvAddress; // listening address
+    private InetAddress infAddress; // interface address
+    private int bufferLength = 256; // 508 - IPv4 guaranteed receive packet size by any host
     private Listener listener;
     private Thread receiver = new ReceiverThread();
     
@@ -78,7 +79,7 @@ public class UdpReceiver {
             		packetQueue.notify();
             	    }
             	} catch (java.net.SocketTimeoutException e) { 
-// do nothing
+// ignore
             	} catch (Exception e) {
             	    if(socket.isClosed()) break;
 		    e.printStackTrace();
@@ -115,39 +116,34 @@ public class UdpReceiver {
 
     public UdpReceiver(int port, InetAddress inetAddress, Listener udpListener) 
 	    throws Exception {
-        InetAddress ia = inetAddress != null ? inetAddress : InetAddress.getByName("0.0.0.0");
-        if (ia.isMulticastAddress()) {
-            groupAddress = ia;
-            socket = new MulticastSocket(port);
-            ((MulticastSocket)socket).joinGroup(ia);
+        if (port < 0) throw new IllegalArgumentException();
+        this.port = port;
+        rcvAddress = inetAddress != null ? inetAddress : InetAddress.getByName("0.0.0.0");
+        if (rcvAddress.isMulticastAddress()) {
+// See note:
+//   https://docs.oracle.com/javase/7/docs/api/java/net/DatagramSocket.html#setReuseAddress(boolean)
+            socket = new MulticastSocket(null);
+            socket.setReuseAddress(true);
         } else {
-            socket = new DatagramSocket(port, ia);
-            if (ia.isAnyLocalAddress()) socket.setBroadcast(true); // android
+    	    socket = new DatagramSocket(null);
         }
         this.listener = udpListener;
     }
-
+    
     public void setInterface(InetAddress infInetAddress) throws IOException {
-	if (receiver.isAlive()) throw new SocketException("Socket in use");
-	if (NetworkInterface.getByInetAddress(infInetAddress) == null) {
-	    throw new SocketException("No such interface");
-	}
-	if (isMulticastSocket()) { 
-	    ((MulticastSocket) socket).setInterface(infInetAddress);
-	} else {
-	    int port = socket.getLocalPort();
-	    socket.close();
-	    socket = new DatagramSocket(port, infInetAddress);
-	}
+        if (receiver.isAlive()) throw new SocketException("Socket in use");
+        if (NetworkInterface.getByInetAddress(infInetAddress) == null) {
+            throw new SocketException("No such interface");
+        }
         infAddress = infInetAddress;
     }
     
     public InetAddress getInfAddress() {
-	return infAddress;
+        return infAddress;
     }
     
     public boolean isMulticastSocket() {
-	return groupAddress != null;
+        return rcvAddress.isMulticastAddress();
     }
 
     public DatagramSocket getSocket() {
@@ -155,7 +151,7 @@ public class UdpReceiver {
     }
 
     public void setBufferLength(int length) throws IllegalArgumentException {
-	if (length <= 0) throw new IllegalArgumentException();
+        if (length <= 0) throw new IllegalArgumentException();
         bufferLength = length;
     }
 
@@ -163,11 +159,39 @@ public class UdpReceiver {
         return bufferLength;
     }
     
-    public void start() throws SocketException {
-	if(socket.isClosed()) throw new java.net.SocketException("Socket is closed");
-	if (receiver.isAlive()) return;
-	receiver.start();
-	showSocketInfo();
+    public void start() throws IOException {
+        if(socket.isClosed()) throw new java.net.SocketException("Socket is closed");
+        if (receiver.isAlive()) return;
+        if (!socket.isBound()) bind();
+        socket.setSoTimeout(0); // infinite timeout
+        receiver.start();
+        showSocketInfo();
+    }
+
+    private boolean isExternalAddress(InetAddress ia) throws SocketException {
+        return !(ia.isMulticastAddress() || ia.isAnyLocalAddress() || ia.isLoopbackAddress()
+            || NetworkInterface.getByInetAddress(ia) != null);
+    }
+
+    private void bind() throws IOException {
+        if (isMulticastSocket()) {
+            socket.bind(new InetSocketAddress(port));
+            ((MulticastSocket) socket).joinGroup(rcvAddress);
+            if (infAddress != null) ((MulticastSocket) socket).setInterface(infAddress);
+        } else {
+            if (infAddress != null) { 
+                socket.bind(new InetSocketAddress(infAddress, port));
+                if (rcvAddress.isAnyLocalAddress()) socket.setBroadcast(true);
+                else socket.connect(rcvAddress, port);
+            } else {
+                if (isExternalAddress(rcvAddress)) {
+                    socket.bind(new InetSocketAddress(port));
+                    socket.connect(rcvAddress, port);
+                } else {
+                    socket.bind(new InetSocketAddress(rcvAddress, port));
+                }
+            }
+        }
     }
     
     private void showSocketInfo() {
@@ -175,9 +199,9 @@ public class UdpReceiver {
 	    System.out.println("UDP receiver socket is bound to: "
 		+ socket.getLocalSocketAddress()
 		+ (socket.getBroadcast() ? " broadcast" : "")
-		+ (groupAddress == null ? "" :  
-		    (" MCgroup: " + groupAddress 
-		    + (groupAddress.isMCLinkLocal() ? " local" : "")
+		+ (!isMulticastSocket() ? "" :  
+		    (" MCgroup: " + rcvAddress 
+		    + (rcvAddress.isMCLinkLocal() ? " local" : "")
 		    + (infAddress != null ? " interface: " + infAddress : "")))
 	    );
 	} catch (Exception e) {
@@ -188,8 +212,9 @@ public class UdpReceiver {
     public void close() {
         if (!socket.isClosed()) {
     	    try { // ???
-        	if (groupAddress != null) 
-        	    ((MulticastSocket)socket).leaveGroup(groupAddress);
+        	if (isMulticastSocket()) 
+        	    ((MulticastSocket)socket).leaveGroup(rcvAddress);
+        	if (socket.isConnected()) socket.disconnect();
     	    } catch (Exception e) {
     		e.printStackTrace();
     	    }
