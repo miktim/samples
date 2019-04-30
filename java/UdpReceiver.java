@@ -32,7 +32,7 @@
  *
  * Author:  miktim@mail.ru
  * Created: 2019-03-21
- * Updated: 2019-04-24
+ * Updated: 2019-04-30
  *
  * License: MIT
  */
