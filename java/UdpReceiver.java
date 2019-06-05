@@ -1,4 +1,5 @@
 //package org.samples.java.udp;
+//package org.samples.java.udp;
 
 /**
  * UdpReceiver class. Queues up received packets.
@@ -13,7 +14,7 @@
  *   		e.printStackTrace();
  *      }
  *   };
- *   // open multicast or datagram socket (depends on address)
+ *   // create multicast or datagram socket (depends on address)
  *   UdpReceiver receiver =
  *  	new UdpReceiver(10000, InetAddress.getByName("224.0.0.1"), listener);
  *   // define socket interface, if needed
@@ -32,7 +33,7 @@
  *
  * Author:  miktim@mail.ru
  * Created: 2019-03-21
- * Updated: 2019-04-30
+ * Updated: 2019-06-05
  *
  * License: MIT
  */
@@ -55,7 +56,7 @@ public class UdpReceiver {
     }
     
     private DatagramSocket socket;
-    private int port;
+    private int port;               // bind port (local & remote)
     private InetAddress rcvAddress; // listening address
     private InetAddress infAddress; // interface address
     private int bufferLength = 256; // 508 - IPv4 guaranteed receive packet size by any host
@@ -126,6 +127,7 @@ public class UdpReceiver {
             socket.setReuseAddress(true);
         } else {
     	    socket = new DatagramSocket(null);
+            if (rcvAddress.isAnyLocalAddress()) socket.setBroadcast(true);
         }
         this.listener = udpListener;
     }
@@ -168,7 +170,7 @@ public class UdpReceiver {
         showSocketInfo();
     }
 
-    private boolean isExternalAddress(InetAddress ia) throws SocketException {
+    private boolean isRemoteAddress(InetAddress ia) throws SocketException {
         return !(ia.isMulticastAddress() || ia.isAnyLocalAddress() || ia.isLoopbackAddress()
             || NetworkInterface.getByInetAddress(ia) != null);
     }
@@ -181,10 +183,9 @@ public class UdpReceiver {
         } else {
             if (infAddress != null) { 
                 socket.bind(new InetSocketAddress(infAddress, port));
-                if (rcvAddress.isAnyLocalAddress()) socket.setBroadcast(true);
-                else socket.connect(rcvAddress, port);
+                if (!rcvAddress.isAnyLocalAddress()) socket.connect(rcvAddress, port);
             } else {
-                if (isExternalAddress(rcvAddress)) {
+                if (isRemoteAddress(rcvAddress)) {
                     socket.bind(new InetSocketAddress(port));
                     socket.connect(rcvAddress, port);
                 } else {
@@ -195,18 +196,18 @@ public class UdpReceiver {
     }
     
     private void showSocketInfo() {
-	try {
-	    System.out.println("UDP receiver socket is bound to: "
-		+ socket.getLocalSocketAddress()
-		+ (socket.getBroadcast() ? " broadcast" : "")
-		+ (!isMulticastSocket() ? "" :  
-		    (" MCgroup: " + rcvAddress 
-		    + (rcvAddress.isMCLinkLocal() ? " local" : "")
-		    + (infAddress != null ? " interface: " + infAddress : "")))
-	    );
-	} catch (Exception e) {
-	    e.printStackTrace();
-	}
+        try {
+            System.out.println("UDP receiver socket is bound to: "
+            + socket.getLocalSocketAddress()
+            + (socket.getBroadcast() ? " broadcast" : "")
+            + (!isMulticastSocket() ? "" :  
+                (" MCgroup: " + rcvAddress 
+                + (rcvAddress.isMCLinkLocal() ? " local" : "")))
+            + (infAddress != null ? " interface: " + infAddress : "")
+            );
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public void close() {
