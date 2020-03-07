@@ -5,8 +5,7 @@
  * rfc8259 https://datatracker.ietf.org/doc/rfc8259/?include_text=1
  * Limitations:
  * - Numbers: implements double precision;
- * - Strings: escape/unescape double quotes only;
- * - JSON object properties in unpredictable order
+ * - Strings: escape/unescape double quotes only
  *
  * Supported types:
  * JSON object, Object[] array, String, Number, Boolean, null
@@ -19,7 +18,7 @@ package samples.miktim.org;
 import java.io.IOException;
 import java.io.Reader;
 import java.util.Map;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.io.StringReader;
 import java.util.Arrays;
 import static java.util.Arrays.binarySearch;
@@ -39,7 +38,7 @@ public class JSON implements Cloneable {
         return stringifyObject(checkObjectType(object));
     }
 
-    private final HashMap<String, Object> properties = new HashMap<>(10);
+    private final LinkedHashMap<String, Object> properties = new LinkedHashMap<>();
 
     public JSON() {
     }
@@ -63,7 +62,7 @@ public class JSON implements Cloneable {
         }
     }
 
-    public HashMap<String, Object> listProperties() {
+    public LinkedHashMap<String, Object> listProperties() {
         return this.properties;
     }
 
@@ -235,7 +234,7 @@ public class JSON implements Cloneable {
         if (value == null) {
             return "null";
         } else if (value instanceof JSON) {
-            HashMap<String, Object> hmap
+            LinkedHashMap<String, Object> hmap
                     = ((JSON) value).listProperties();
             StringBuilder sb = new StringBuilder("{");
             String delimiter = "";
