@@ -258,7 +258,8 @@ public class JSON implements Cloneable {
         } else if (value instanceof String) {
             return "\"" + escapeString((String) value) + "\"";
         }
-        return value.toString().replace(".0", ""); // remove trailing .0 if any
+        String s = value.toString(); // Number, Boolean
+        return s.endsWith(".0") ? s.replace(".0", "") : s; // remove trailing .0 if any
     }
 
     private static Object checkObjectType(Object object) throws IllegalArgumentException {
