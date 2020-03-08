@@ -1,6 +1,6 @@
 /**
  * my JSON, java 1.7+
- * MIT (c) 2020 miktim@mail.ru (sorry, could not resist - invented the wheel)
+ * MIT (c) 2020 miktim@mail.ru (invented the wheel?)
  * 
  * rfc8259 https://datatracker.ietf.org/doc/rfc8259/?include_text=1
  * Limitations:
@@ -11,7 +11,7 @@
  * JSON object, Object[] array, String, Number, Boolean, null
  * Usage: see main method at the end of code
  *
- * Updated: 2020.03.07
+ * Updated: 2020.03.08
  */
 package samples.miktim.org;
 
@@ -81,7 +81,8 @@ public class JSON implements Cloneable {
         if (propName == null || propName.isEmpty()) {
             throw new IllegalArgumentException();
         }
-        return listProperties().put(propName, checkObjectType(value));
+        listProperties().put(propName, checkObjectType(value));
+        return this;
     }
 
     public Object remove(String propName) {
@@ -279,12 +280,12 @@ public class JSON implements Cloneable {
 /*
     public static void main(String[] args) throws Exception {
         JSON json = new JSON();
-        json.set("Escaped", "Size 1.44\"");
-        json.set("EmptyJSON", new JSON());
-        json.set("EmptyArray", new Object[0]);
-        json.set("Null", null);
-        json.set("False", (Boolean) false);
-        json.set("VeryLongNumber", (Number) 3.141592653589793238462643383279);
+        json.set("Escaped", "Size 1.44\"")
+        .set("EmptyJSON", new JSON())
+        .set("EmptyArray", new Object[0])
+        .set("Null", null)
+        .set("False", (Boolean) false)
+        .set("VeryLongNumber", (Number) 3.141592653589793238462643383279);
         System.out.println(json);
 
         String example1 = "{\n"
