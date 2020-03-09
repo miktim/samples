@@ -11,7 +11,7 @@
  * JSON object, Object[] array, String, Number, Boolean, null
  * Usage: see main method at the end of code
  *
- * Updated: 2020.03.08
+ * Updated: 2020.03.09
  */
 package samples.miktim.org;
 
@@ -186,7 +186,7 @@ public class JSON implements Cloneable {
             } else if (charIn(NUMBERS, lastChar())) {
                 object = (Number) Double.parseDouble(nextChars(NUMBERS));
             } else if (lastChar() == '"') { // String
-                StringBuilder sb = new StringBuilder(1024); // ???CharBuffer
+                StringBuilder sb = new StringBuilder(128); // ???CharBuffer
                 while ((lastChar() == '\\' && getChar() == '"')
                         || getChar() != '"') {
                     sb.append(Character.toString(lastChar()));
