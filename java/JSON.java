@@ -77,7 +77,7 @@ public class JSON implements Cloneable {
         return listProperties().get(propName);
     }
 
-    public Object set(String propName, Object value) throws IllegalArgumentException {
+    public JSON set(String propName, Object value) throws IllegalArgumentException {
         if (propName == null || propName.isEmpty()) {
             throw new IllegalArgumentException();
         }
