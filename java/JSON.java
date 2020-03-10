@@ -1,17 +1,16 @@
 /**
  * my JSON, java 1.7+
  * MIT (c) 2020 miktim@mail.ru (invented the wheel?)
- * 
- * rfc8259 https://datatracker.ietf.org/doc/rfc8259/?include_text=1
- * Limitations:
- * - Numbers: implements double precision;
- * - Strings: escape/unescape double quotes only
  *
- * Supported types:
- * JSON object, Object[] array, String, Number, Boolean, null
+ * RFC 8259 https://datatracker.ietf.org/doc/rfc8259/?include_text=1
+ * Release notes:
+ * - supported java types:
+ *     JSON object, Object[] array, String, Number, Boolean, null;
+ * - parser implements BigDecimal for numbers;
+ *
  * Usage: see main method at the end of code
  *
- * Updated: 2020.03.09
+ * Updated: 2020-03-10
  */
 package samples.miktim.org;
 
@@ -20,6 +19,7 @@ import java.io.Reader;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import java.io.StringReader;
+import java.math.BigDecimal;
 import java.util.Arrays;
 import static java.util.Arrays.binarySearch;
 import java.util.Vector; //obsolete?
@@ -89,7 +89,7 @@ public class JSON implements Cloneable {
         return this.listProperties().remove(propName);
     }
 
-    private static class Parser {
+    static class Parser {
 
         private static final char[] WHITESPACES = " \n\r\t".toCharArray();
         private static final char[] NUMBERS = "+-0123456789eE.".toCharArray();
@@ -102,18 +102,18 @@ public class JSON implements Cloneable {
         }
 
         private Reader reader;
-        private char lastChar = ' ';
+        private int lastChar = 0x20;
 
         char getChar() throws IOException {
             if (eot()) { // end of text
                 syntaxException();
             }
-            this.lastChar = (char) this.reader.read();
-            return this.lastChar;
+            this.lastChar = this.reader.read();
+            return this.lastChar();
         }
 
         char lastChar() {
-            return this.lastChar;
+            return (char) this.lastChar;
         }
 
         boolean charIn(char[] chars, char key) {
@@ -121,7 +121,7 @@ public class JSON implements Cloneable {
         }
 
         boolean eot() {// end of text?
-            return lastChar() == (char) -1; 
+            return this.lastChar == -1;
         }
 
         String nextChars(char[] chars) throws IOException {
@@ -148,10 +148,6 @@ public class JSON implements Cloneable {
 
         void syntaxException() throws IOException {
             throw new IOException(); //???java.text.ParseException
-        }
-
-        String unescapeString(String s) {
-            return s.replaceAll("\\\"", "\"");
         }
 
         private Object parseObject() throws IOException {
@@ -184,12 +180,12 @@ public class JSON implements Cloneable {
                 }
                 object = list.toArray();
             } else if (charIn(NUMBERS, lastChar())) {
-                object = (Number) Double.parseDouble(nextChars(NUMBERS));
+                object = (Number) new BigDecimal(nextChars(NUMBERS));
             } else if (lastChar() == '"') { // String
                 StringBuilder sb = new StringBuilder(128); // ???CharBuffer
-                while ((lastChar() == '\\' && getChar() == '"')
-                        || getChar() != '"') {
-                    sb.append(Character.toString(lastChar()));
+                while (getChar()!='"') {
+                    sb.append(lastChar());
+                    if(lastChar() == '\\') sb.append(getChar());
                 }
                 getChar(); // skip trailing double quote
                 object = unescapeString(sb.toString());
@@ -217,18 +213,13 @@ public class JSON implements Cloneable {
 
         Object parse(Reader reader) throws IOException {
             this.reader = reader;
-            this.lastChar = ' '; //!!!
+            this.lastChar = 0x20; //!!!
             Object object = parseObject();
             if (!eot()) { // not end of text
                 syntaxException();
             }
             return object;
         }
-    }
-
-// stringify
-    static String escapeString(String s) {
-        return s.replaceAll("\"", "\\\"");
     }
 
     static String stringifyObject(Object value) {
@@ -258,11 +249,10 @@ public class JSON implements Cloneable {
         } else if (value instanceof String) {
             return "\"" + escapeString((String) value) + "\"";
         }
-        String s = value.toString(); // Number, Boolean
-        return s.endsWith(".0") ? s.replace(".0", "") : s; // remove trailing .0 if any
+        return value.toString(); // Number, Boolean
     }
 
-    private static Object checkObjectType(Object object) throws IllegalArgumentException {
+    static Object checkObjectType(Object object) throws IllegalArgumentException {
         if (object == null
                 || (object instanceof String)
                 || (object instanceof Number)
@@ -277,23 +267,78 @@ public class JSON implements Cloneable {
         }
         throw new IllegalArgumentException();
     }
+
+        private static final char[] ESCAPED_CHARS = {'b', 'f', 'n', 'r', 't', '"', '\\', '/'};
+        private static final char[] CHARS_UNESCAPED = {0x8, 0xC, 0xA, 0xD, 0x9, 0x22, 0x2F, 0x5C};
+
+        public static String unescapeString(String s) {
+            StringBuilder sb = new StringBuilder(64);
+            char[] chars = s.toCharArray();  
+            for (int i = 0; i < chars.length; i++) {
+                char c = chars[i];
+                if (c == '\\') {
+                    c = chars[++i];
+                    int ei = binarySearch(ESCAPED_CHARS, c);
+                    if (ei >= 0) {
+                        sb.append(CHARS_UNESCAPED[ei]);
+                        continue;
+                    } else if (c == 'u') {
+                        sb.append((char) Integer.parseInt(new String(chars, ++i, 4), 16));
+                        i += 3;
+                        continue;
+                    }
+                }
+                sb.append(c);
+            }
+            return sb.toString();
+        }
+
+        private static final int[] UNESCAPED_CHARS = {0x8, 0x9, 0xA, 0xC, 0xD, 0x22, 0x2F, 0x5C}; //
+        private static final String[] CHARS_ESCAPED = {"\\b", "\\t", "\\n", "\\f", "\\r", "\\\"", "\\/", "\\\\"};
+
+        public static String escapeString(String s) {
+            StringBuilder sb = new StringBuilder(64);
+            for (int i = 0; i < s.length(); i++) {
+                int c = s.codePointAt(i);
+                int ei = binarySearch(UNESCAPED_CHARS, c);
+                if (ei >= 0) {
+                    sb.append(CHARS_ESCAPED[ei]);
+                } else if (c <= 0x1F) {
+                    sb.append(String.format("\\u%04x", c));
+                } else if (c >= 0xFFFF) {
+                    c -= 0x10000;
+                    sb.append(String.format("\\u%04x\\u%04x",
+                            (c >>> 10) + 0xD800, (c & 0x3FF) + 0xDC00)); // surrogates
+                    i++;
+                } else {
+                    sb.append((char) c);
+                }
+            }
+            return sb.toString();
+        }
 /*
     public static void main(String[] args) throws Exception {
         JSON json = new JSON();
-        json.set("Escaped", "Size 1.44\"")
-        .set("EmptyJSON", new JSON())
-        .set("EmptyArray", new Object[0])
-        .set("Null", null)
-        .set("False", (Boolean) false)
-        .set("VeryLongNumber", (Number) 3.141592653589793238462643383279);
+        json.set("Escaped", new String(new char[]{0x8, 0x9, 0xA, 0xC, 0xD, 0x22, 0x2F, 0x5C, 0, '-', 0x1F, 0xd834, 0xdd1e}))
+                .set("EmptyJSON", new JSON())
+                .set("EmptyArray", new Object[0])
+                .set("Null", null)
+                .set("False", (Boolean) false)
+                .set("Double", 3.141592653589793238462643383279)
+                .set("BigDecimal", new BigDecimal("3.141592653589793238462643383279"))
+                .set("MaxLong", Long.MAX_VALUE);
         System.out.println(json);
-
+        System.out.println(JSON.escapeString((String)json.get("Escaped")));
+        System.out.println(json.clone());
+        System.out.println(((Number) json.get("Double")).longValue());
+// examples from RFC 8259        
         String example1 = "{\n"
                 + "        \"Image\": {\n"
                 + "            \"Width\":  800,\n"
                 + "            \"Height\": 600,\n"
                 + "            \"Title\":  \"View from 15th Floor\",\n"
                 + "            \"Thumbnail\": {\n"
+//??? in accordance with RFC, the solidus (/) MUST be escaped                
                 + "                \"Url\":    \"http://www.example.com/image/481989943\",\n"
                 + "                \"Height\": 125,\n"
                 + "                \"Width\":  100\n"
@@ -333,5 +378,5 @@ public class JSON implements Cloneable {
         object = JSON.parse(example2);
         System.out.println(JSON.stringify(((Object[]) object)[1]));
     }
-*/
+*/    
 }
