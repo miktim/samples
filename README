@@ -4,6 +4,6 @@ Usage: see code
 
 /java/ByteArray.java      rev 181219  Pack/unpack data (byte, byte[], short, int, long, float, double) into byte[]
 /java/UdpReceiver.java    rev 190605  Queues up received packets.
-/java/JSON.java           rev 200309  one more JSON (java 1.7+)
+/java/JSON.java           rev 200311  one more JSON (java 1.7+)
 
 /android/Notifier.java    rev 190402  API 14+
