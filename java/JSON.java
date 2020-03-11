@@ -10,9 +10,9 @@
  *
  * Usage: see main method at the end of code
  *
- * Updated: 2020-03-10
+ * Updated: 2020-03-11
  */
-package samples.miktim.org;
+package samples.java.org;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -106,7 +106,7 @@ public class JSON implements Cloneable {
 
         char getChar() throws IOException {
             if (eot()) { // end of text
-                syntaxException();
+                throw new IOException("unexpected EOT");
             }
             this.lastChar = this.reader.read();
             return this.lastChar();
@@ -146,10 +146,6 @@ public class JSON implements Cloneable {
             return false;
         }
 
-        void syntaxException() throws IOException {
-            throw new IOException(); //???java.text.ParseException
-        }
-
         private Object parseObject() throws IOException {
 //            skipWhitespaces(); // leading
             Object object = null;
@@ -161,11 +157,11 @@ public class JSON implements Cloneable {
                         if ((propName instanceof String) && expectedChar(':')) {
                             ((JSON) object).set((String) propName, parseObject());
                         } else {
-                            syntaxException();
+                            throw new IOException("property name expected");
                         }
                     } while (expectedChar(','));
                     if (!expectedChar('}')) {
-                        syntaxException();
+                        throw new IOException("'}' expected");
                     }
                 }
             } else if (expectedChar('[')) { // JSON array
@@ -175,17 +171,17 @@ public class JSON implements Cloneable {
                         list.add(parseObject());
                     } while (expectedChar(','));
                     if (!expectedChar(']')) {
-                        syntaxException();
+                        throw new IOException("']' expected");
                     }
                 }
                 object = list.toArray();
-            } else if (charIn(NUMBERS, lastChar())) {
-                object = (Number) new BigDecimal(nextChars(NUMBERS));
             } else if (lastChar() == '"') { // String
                 StringBuilder sb = new StringBuilder(128); // ???CharBuffer
-                while (getChar()!='"') {
+                while (getChar() != '"') {
                     sb.append(lastChar());
-                    if(lastChar() == '\\') sb.append(getChar());
+                    if (lastChar() == '\\') {
+                        sb.append(getChar());
+                    }
                 }
                 getChar(); // skip trailing double quote
                 object = unescapeString(sb.toString());
@@ -202,10 +198,12 @@ public class JSON implements Cloneable {
                         object = null;
                         break;
                     default:
-                        syntaxException();
+                        throw new IOException("unknown literal");
                 }
+            } else if (charIn(NUMBERS, lastChar())) {
+                object = (Number) new BigDecimal(nextChars(NUMBERS)); // NumberFormatException
             } else {
-                syntaxException();
+                throw new IOException("unexpected char");
             }
             skipWhitespaces(); // trailing
             return object;
@@ -216,7 +214,7 @@ public class JSON implements Cloneable {
             this.lastChar = 0x20; //!!!
             Object object = parseObject();
             if (!eot()) { // not end of text
-                syntaxException();
+                throw new IOException("EOT expected");
             }
             return object;
         }
@@ -268,54 +266,54 @@ public class JSON implements Cloneable {
         throw new IllegalArgumentException();
     }
 
-        private static final char[] ESCAPED_CHARS = {'b', 'f', 'n', 'r', 't', '"', '\\', '/'};
-        private static final char[] CHARS_UNESCAPED = {0x8, 0xC, 0xA, 0xD, 0x9, 0x22, 0x2F, 0x5C};
+    private static final char[] ESCAPED_CHARS = {'"', '/', '\\', 'b', 'f', 'n', 'r', 't'};
+    private static final char[] CHARS_UNESCAPED = {0x22, 0x2F, 0x5C, 0x8, 0xC, 0xA, 0xD, 0x9};
 
-        public static String unescapeString(String s) {
-            StringBuilder sb = new StringBuilder(64);
-            char[] chars = s.toCharArray();  
-            for (int i = 0; i < chars.length; i++) {
-                char c = chars[i];
-                if (c == '\\') {
-                    c = chars[++i];
-                    int ei = binarySearch(ESCAPED_CHARS, c);
-                    if (ei >= 0) {
-                        sb.append(CHARS_UNESCAPED[ei]);
-                        continue;
-                    } else if (c == 'u') {
-                        sb.append((char) Integer.parseInt(new String(chars, ++i, 4), 16));
-                        i += 3;
-                        continue;
-                    }
-                }
-                sb.append(c);
-            }
-            return sb.toString();
-        }
-
-        private static final int[] UNESCAPED_CHARS = {0x8, 0x9, 0xA, 0xC, 0xD, 0x22, 0x2F, 0x5C}; //
-        private static final String[] CHARS_ESCAPED = {"\\b", "\\t", "\\n", "\\f", "\\r", "\\\"", "\\/", "\\\\"};
-
-        public static String escapeString(String s) {
-            StringBuilder sb = new StringBuilder(64);
-            for (int i = 0; i < s.length(); i++) {
-                int c = s.codePointAt(i);
-                int ei = binarySearch(UNESCAPED_CHARS, c);
+    public static String unescapeString(String s) {
+        StringBuilder sb = new StringBuilder(64);
+        char[] chars = s.toCharArray();
+        for (int i = 0; i < chars.length; i++) {
+            char c = chars[i];
+            if (c == '\\') {
+                c = chars[++i];
+                int ei = binarySearch(ESCAPED_CHARS, c);
                 if (ei >= 0) {
-                    sb.append(CHARS_ESCAPED[ei]);
-                } else if (c <= 0x1F) {
-                    sb.append(String.format("\\u%04x", c));
-                } else if (c >= 0xFFFF) {
-                    c -= 0x10000;
-                    sb.append(String.format("\\u%04x\\u%04x",
-                            (c >>> 10) + 0xD800, (c & 0x3FF) + 0xDC00)); // surrogates
-                    i++;
-                } else {
-                    sb.append((char) c);
+                    sb.append(CHARS_UNESCAPED[ei]);
+                    continue;
+                } else if (c == 'u') {
+                    sb.append((char) Integer.parseInt(new String(chars, ++i, 4), 16));
+                    i += 3;
+                    continue;
                 }
             }
-            return sb.toString();
+            sb.append(c);
         }
+        return sb.toString();
+    }
+
+    private static final int[] UNESCAPED_CHARS = {0x8, 0x9, 0xA, 0xC, 0xD, 0x22, 0x2F, 0x5C}; //
+    private static final String[] CHARS_ESCAPED = {"\\b", "\\t", "\\n", "\\f", "\\r", "\\\"", "\\/", "\\\\"};
+
+    public static String escapeString(String s) {
+        StringBuilder sb = new StringBuilder(64);
+        for (int i = 0; i < s.length(); i++) {
+            int c = s.codePointAt(i);
+            int ei = binarySearch(UNESCAPED_CHARS, c);
+            if (ei >= 0) {
+                sb.append(CHARS_ESCAPED[ei]);
+            } else if (c <= 0x1F) {
+                sb.append(String.format("\\u%04X", c));
+            } else if (c >= 0xFFFF) {
+                c -= 0x10000;
+                sb.append(String.format("\\u%04X\\u%04X",
+                        (c >>> 10) + 0xD800, (c & 0x3FF) + 0xDC00)); // surrogates
+                i++;
+            } else {
+                sb.append((char) c);
+            }
+        }
+        return sb.toString();
+    }
 /*
     public static void main(String[] args) throws Exception {
         JSON json = new JSON();
@@ -328,7 +326,8 @@ public class JSON implements Cloneable {
                 .set("BigDecimal", new BigDecimal("3.141592653589793238462643383279"))
                 .set("MaxLong", Long.MAX_VALUE);
         System.out.println(json);
-        System.out.println(JSON.escapeString((String)json.get("Escaped")));
+        System.out.println((JSON) JSON.parse(json.stringify()));
+        System.out.println(JSON.escapeString((String) json.get("Escaped")));
         System.out.println(json.clone());
         System.out.println(((Number) json.get("Double")).longValue());
 // examples from RFC 8259        
@@ -378,5 +377,5 @@ public class JSON implements Cloneable {
         object = JSON.parse(example2);
         System.out.println(JSON.stringify(((Object[]) object)[1]));
     }
-*/    
+*/
 }
