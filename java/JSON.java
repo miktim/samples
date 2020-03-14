@@ -10,7 +10,7 @@
  *
  * Usage: see main method at the end of code
  *
- * Updated: 2020-03-11
+ * Updated: 2020-03-14
  */
 package samples.java.org;
 
@@ -303,7 +303,7 @@ public class JSON implements Cloneable {
                 sb.append(CHARS_ESCAPED[ei]);
             } else if (c <= 0x1F) {
                 sb.append(String.format("\\u%04X", c));
-            } else if (c >= 0xFFFF) {
+            } else if (c > 0xFFFF) {
                 c -= 0x10000;
                 sb.append(String.format("\\u%04X\\u%04X",
                         (c >>> 10) + 0xD800, (c & 0x3FF) + 0xDC00)); // surrogates
